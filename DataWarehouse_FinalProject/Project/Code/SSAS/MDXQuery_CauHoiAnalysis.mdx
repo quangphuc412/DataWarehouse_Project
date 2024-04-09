@@ -1,0 +1,131 @@
+﻿--Cau 1: Top 5 khách hàng có số lượng đơn hàng kèm khuyến mãi nhiều nhất của từng quốc gia
+select [Measures].[Num Deals Purchases] on 0,
+GENERATE( [Dim Customer].[Country].[Country], 
+	TOPCOUNT( [Dim Customer].[Country].CURRENTMEMBER
+	*[Dim Customer].[User ID].[User ID],
+	5, [Measures].[Num Deals Purchases])) on 1
+from [MarketingAnalysisDWH]
+
+--Cau2: Quốc gia nào có số đơn mua hàng tại store nhiều nhất
+select [Measures].[Num Store Purchases] on 0,
+TOPSUM([Dim Customer].[Country].[Country].MEMBERS, 
+1, [Measures].[Num Store Purchases]) on 1
+from [MarketingAnalysisDWH]
+
+--Cau3: Cho biết thu nhập hằng năm của khách hàng đã chấp nhận 4 chiến dịch marketing
+select {[Measures].[Income], [Measures].[Total Campaigns Accepted]} on 0,
+	FILTER([Dim Customer].[User ID].[User ID], 
+	[Measures].[Total Campaigns Accepted] = 4) on 1
+from [MarketingAnalysisDWH]
+
+--Cau4: Cho biết nơi ở của 10 khách hàng có tổng chi cho các mặt hàng là trái cây
+--theo chiều giảm dần lấy từ vị trí thứ 3
+select [Measures].[Mnt Fruits] on 0,
+	GENERATE([Dim Customer].[Country].[Country], 
+	[Dim Customer].[Country].CURRENTMEMBER*
+		(SUBSET(ORDER([Dim Customer].[User ID].CHILDREN, 
+			[Measures].[Mnt Fruits], DESC), 3, 10))) on 1
+from [MarketingAnalysisDWH]
+
+--Cau5:  In ra những khách hàng chi cho mặt hàng kẹo nhiều hơn 100$ nhưng số trẻ
+--em trong nhà ít hơn 2
+select {[Measures].[Kidhome],
+[Measures].[Mnt Sweets]} on 0,
+except(
+	{filter([Dim Customer].[User ID].children,
+	[Measures].[Mnt Sweets] > 100)},
+	{filter([Dim Customer].[User ID].children,
+	[Measures].[Kidhome] >= 2)}) on 1
+from [MarketingAnalysisDWH]
+
+--Cau6: Mỗi tháng trong năm 2014, liệt kê 5 khách hàng có tổng số đơn mua hàng nhiều nhất
+with member [Measures].[TongSoDonHang] as
+[Measures].[Num Catalog Purchases]+[Measures].[Num Deals Purchases]+
+[Measures].[Num Store Purchases]+[Measures].[Num Web Purchases]
+select [Measures].[TongSoDonHang] on 0,
+	generate(
+		{descendants([Dim Date].[DateEnrollHierarchy].[Year].[2014].children,
+		[Dim Date].[DateEnrollHierarchy].[Month])},
+		{topcount([Dim Date].[Month].currentmember*
+		[Dim Customer].[User ID].children,
+		5, [Measures].[TongSoDonHang])}) on 1
+from [MarketingAnalysisDWH]
+
+--Cau7: Thống kê những khách hàng vừa mua hàng ở web hơn 10 lần vừa mua hàng 
+--ở cửa hàng hơn 10 lần
+select {[Measures].[Num Web Purchases], [Measures].[Num Store Purchases]} on 0,
+intersect({filter([Dim Customer].[User ID].[User ID], 
+				[Measures].[Num Web Purchases] > 10)},
+		{filter([Dim Customer].[User ID].[User ID], 
+			[Measures].[Num Store Purchases] > 10)}) on 1
+from [MarketingAnalysisDWH]
+
+--Cau8: Truy vấn drill down các tháng của năm 2012 có lượng tiêu thụ các mặt hàng
+--về rượu nhiều hơn 2000$
+select [Measures].[Mnt Wines] on 0,
+[Dim Date].[Month].[Month]*
+(filter({drilldownmember([Dim Date].[DateEnrollHierarchy].[Day],
+		[Dim Date].[DateEnrollHierarchy].[Month].members)},
+	[Measures].[Mnt Wines] >= 2000)) on 1
+from [MarketingAnalysisDWH]
+where [Dim Date].[Year].&[2012]
+
+--Cau9: Cho biết top 10 khách hàng có thu nhập hằng năm lớn nhất
+select [Measures].[Income] on 0,
+head(order( [Dim Customer].[User ID].[User ID].members, 
+			[Measures].[Income], desc),10) on 1
+from [MarketingAnalysisDWH]
+
+--Cau10: Cho biết tên 2 quốc gia nào có số lượng mua hàng ở store ít nhất
+select [Measures].[Num Store Purchases] on 0,
+bottomcount([Dim Customer].[Country].[Country].members, 
+		2, [Measures].[Num Store Purchases]) on 1
+from [MarketingAnalysisDWH]
+
+--Cau11: Tính trung bình số tiền đã chi cho tất cả các mặt hàng của 5% khách hàng 
+--có thu nhập hàng năm cao nhất theo từng quốc gia
+with member [Measures].[TrungBinh] as
+[Measures].[Total Spent] / [Measures].[TongSoDonHang]
+select {[Measures].[Income], [Measures].[TrungBinh]} on 0,
+GENERATE([Dim Customer].[Country].[Country],
+    {TOPPERCENT({[Dim Customer].[Country].CURRENTMEMBER 
+	* FILTER([Dim Customer].[User ID].[User ID],
+	[Measures].[TongSoDonHang] <> 0)}, 5, [Measures].[Income])}) on 1
+from [MarketingAnalysisDWH]
+
+--Cau12: Thống kê số tiền đã mua hàng của top 10 khách hàng 
+--có thu nhập hàng năm lớn hơn 30000$
+select {[Measures].[Income], [Measures].[Total Spent]} on 0,
+head(
+	{filter({order([Dim Customer].[User ID].[User ID],
+	[Measures].[Total Spent], desc)},
+	[Measures].[Income] > 30000)}, 10) on 1
+from [MarketingAnalysisDWH]
+
+--Cau13: Cho biết 3 tháng có số lượng đơn hàng nhiều nhất tại South Africa
+select [Measures].[TongSoDonHang] on 0,
+head(order( [Dim Date].[Month].[Month],
+	[Measures].[TongSoDonHang], desc), 3) on 1
+from [MarketingAnalysisDWH]
+where [Dim Customer].[Country].&[South Africa]
+
+--Cau14: In ra ngày có ít lượng truy cập vào web nhất trong tháng 9 năm 2012
+select [Measures].[Num Web Visits Month] on 0,
+bottomcount( 
+{descendants([Dim Date].[DateEnrollHierarchy].[Year].&[2012].&[4].&[10],
+	[Dim Date].[DateEnrollHierarchy].[Day])}, 1,
+	[Measures].[Num Web Visits Month]) on 1
+from [MarketingAnalysisDWH]
+
+--Cau15:Cho biết số lượng đơn hàng đã thanh toán qua catalog 
+--và thu nhập hằng năm của top 15 khách hàng
+--độc thân và mới tốt nghiệp ( tăng dần theo số lượng đơn hàng)
+select {[Measures].[Income], [Measures].[Num Catalog Purchases]} on 0,
+tail(
+	order(
+		(drilluplevel(([Dim Customer].[Marital Status].&[Single],
+			[Dim Customer].[Education].&[Graduation]),
+			[Dim Customer].[Marital Status].[Marital Status])*
+			[Dim Customer].[User ID].[User ID])
+			, [Measures].[Num Catalog Purchases], asc), 15) on 1
+from [MarketingAnalysisDWH]
